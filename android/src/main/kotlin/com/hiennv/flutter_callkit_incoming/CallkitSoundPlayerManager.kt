@@ -107,9 +107,8 @@ class CallkitSoundPlayerManager(private val context: Context) {
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
             val audioAttrs = AudioAttributes.Builder()
-                .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
-                .setUsage(AudioAttributes.USAGE_NOTIFICATION_RINGTONE)
-                .setLegacyStreamType(AudioManager.STREAM_RING)
+                .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
+                .setUsage(AudioAttributes.USAGE_MEDIA)
                 .build()
 
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -141,13 +140,12 @@ class CallkitSoundPlayerManager(private val context: Context) {
             ringtone = RingtoneManager.getRingtone(context, uri)
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
                 val attribution = AudioAttributes.Builder()
-                    .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
-                    .setUsage(AudioAttributes.USAGE_NOTIFICATION_RINGTONE)
-                    .setLegacyStreamType(AudioManager.STREAM_RING)
+                    .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
+                    .setUsage(AudioAttributes.USAGE_MEDIA)
                     .build()
                 ringtone?.setAudioAttributes(attribution)
             } else {
-                ringtone?.streamType = AudioManager.STREAM_RING
+                ringtone?.streamType = AudioManager.STREAM_MUSIC
             }
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
                 ringtone?.isLooping = true
