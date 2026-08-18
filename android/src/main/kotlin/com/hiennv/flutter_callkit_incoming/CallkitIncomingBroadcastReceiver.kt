@@ -263,15 +263,23 @@ class CallkitIncomingBroadcastReceiver : BroadcastReceiver() {
 
             "${context.packageName}.${CallkitConstants.ACTION_CALL_ACCEPT}" -> {
                 try {
-                    driveTelecomConnection(context, data, CallkitConstants.ACTION_CALL_ACCEPT)
-                    // Release the self-managed connection right after activating it. Apps whose
-                    // call audio runs over their own engine (not Telecom) don't need it active
-                    // for the call's duration - but leaving it active pins the voice-call audio
-                    // route to the earpiece, which can stay stuck after the app's own audio
-                    // session takes back control. Calling this from here, after
-                    // driveTelecomConnection() has returned, avoids a race where ending it from
-                    // inside the same Connection call as setActive() leaves the audio route
-                    // stuck instead of releasing it.
+                    // Do not drive the connection through markAccepted()/setActive() here. Apps
+                    // whose call audio runs over their own engine (not Telecom) don't need the
+                    // self-managed connection to go OFFHOOK at all: entering STATE_ACTIVE is what
+                    // triggers Telecom's NEW_ACTIVE_OR_DIALING_CALL transition, which hands the
+                    // voice-call route to CallAudioRouteStateMachine and seizes it to the earpiece
+                    // baseline (no headset) -- and setAudioRoute() cannot reliably undo that
+                    // afterwards, since it is only an advisory request Telecom may or may not
+                    // honor. Going straight from RINGING to DISCONNECTED skips the active state --
+                    // and the seizure -- entirely, via the same clean teardown markEnded()/
+                    // onReject() already use from RINGING. This is intentionally scoped to the
+                    // ACTION_CALL_ACCEPT broadcast only: ACTION_CALL_CONNECTED (outgoing/remote-
+                    // answered calls) and onAnswer() (OS-driven accept, e.g. Android Auto/BT head
+                    // units) still go through markAccepted()/setActive() unchanged -- they are a
+                    // different call flow, out of scope here. Since this destroys the connection
+                    // immediately (finishWithCause -> setDisconnected+unregister+destroy), there is
+                    // no live connection left for onHold()/onUnhold()/the resume watcher to later
+                    // drive back to ACTIVE -- no need to activate "just in case" first.
                     CallkitConnection.find(Data.fromBundle(data).id)?.markEnded()
                     FlutterCallkitIncomingPlugin.notifyEventCallbacks(CallkitEventCallback.CallEvent.ACCEPT, data)
                     // start service and show ongoing call when call is accepted
