@@ -264,6 +264,15 @@ class CallkitIncomingBroadcastReceiver : BroadcastReceiver() {
             "${context.packageName}.${CallkitConstants.ACTION_CALL_ACCEPT}" -> {
                 try {
                     driveTelecomConnection(context, data, CallkitConstants.ACTION_CALL_ACCEPT)
+                    // Release the self-managed connection right after activating it. Apps whose
+                    // call audio runs over their own engine (not Telecom) don't need it active
+                    // for the call's duration - but leaving it active pins the voice-call audio
+                    // route to the earpiece, which can stay stuck after the app's own audio
+                    // session takes back control. Calling this from here, after
+                    // driveTelecomConnection() has returned, avoids a race where ending it from
+                    // inside the same Connection call as setActive() leaves the audio route
+                    // stuck instead of releasing it.
+                    CallkitConnection.find(Data.fromBundle(data).id)?.markEnded()
                     FlutterCallkitIncomingPlugin.notifyEventCallbacks(CallkitEventCallback.CallEvent.ACCEPT, data)
                     // start service and show ongoing call when call is accepted
                     CallkitNotificationService.startServiceWithAction(
