@@ -7,7 +7,6 @@ import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
-import android.telecom.CallAudioState
 import android.telecom.Connection
 import android.telecom.DisconnectCause
 import android.telecom.TelecomManager
@@ -74,9 +73,6 @@ class CallkitConnection(
     init {
         connectionProperties = PROPERTY_SELF_MANAGED
         audioModeIsVoip = true
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-            setAudioRoute(CallAudioState.ROUTE_SPEAKER)
-        }
         // CAPABILITY_HOLD ("can be held right now") and CAPABILITY_SUPPORT_HOLD
         // ("hold feature exists") are distinct flags and Telecom requires BOTH:
         // when the user answers another call, CallsManager only holds the active
@@ -118,15 +114,6 @@ class CallkitConnection(
         super.onAbort()
         Log.d(TAG, "onAbort id=$callId")
         finishWithCause(DisconnectCause.UNKNOWN)
-    }
-
-    override fun onCallAudioStateChanged(state: CallAudioState?) {
-        super.onCallAudioStateChanged(state)
-        Log.d(TAG, "onCallAudioStateChanged id=$callId state=$state")
-        if (state?.route != CallAudioState.ROUTE_SPEAKER) {
-            Log.d(TAG, "onCallAudioStateChanged: forcing ROUTE_SPEAKER")
-            setAudioRoute(CallAudioState.ROUTE_SPEAKER)
-        }
     }
 
     // Telecom holds this self-managed connection when another call takes over
