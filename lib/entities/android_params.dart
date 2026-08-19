@@ -32,6 +32,8 @@ class AndroidParams {
     this.from,
     this.textAccept,
     this.textDecline,
+    this.stopCallkitAfterAccepting,
+    this.routeRingtoneToSpeaker,
   });
 
   /// Using custom notifications.
@@ -92,6 +94,25 @@ class AndroidParams {
   /// Text for decline button
   final String? textDecline;
 
+  /// By default (false), accepting the call drives the self-managed Telecom connection through
+  /// `markAccepted()`/`setActive()`, matching stock Android Telecom behavior.
+  ///
+  /// Set to true when your app's call audio is handled entirely outside of Telecom (e.g. your
+  /// own VoIP engine) and does not need the connection to reach `STATE_ACTIVE`. Telecom seizes
+  /// the audio route to its own default the moment a self-managed connection goes active, which
+  /// can conflict with an app managing its own call audio; with this enabled, accepting the call
+  /// ends the self-managed connection immediately instead.
+  final bool? stopCallkitAfterAccepting;
+
+  /// By default (false), Telecom's own default audio routing while the connection is ringing is
+  /// left untouched.
+  ///
+  /// A self-managed connection is always placed into `STATE_RINGING` by the framework itself.
+  /// The problem is specifically the no-headset case: Telecom's own baseline for `STATE_RINGING`
+  /// there is the built-in earpiece, not the speaker. Set this to true to correct the audio
+  /// route back to speaker in that case.
+  final bool? routeRingtoneToSpeaker;
+
   factory AndroidParams.fromJson(Map<String, dynamic> json) =>
       _$AndroidParamsFromJson(json);
 
@@ -118,7 +139,9 @@ class AndroidParams {
         'isFullScreen: $isFullScreen, '
         'from: $from, '
         'textAccept: $textAccept, '
-        'textDecline: $textDecline'
+        'textDecline: $textDecline, '
+        'stopCallkitAfterAccepting: $stopCallkitAfterAccepting, '
+        'routeRingtoneToSpeaker: $routeRingtoneToSpeaker'
         '}';
   }
 }

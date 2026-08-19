@@ -137,6 +137,25 @@ data class Data(val args: Map<String, Any?>) {
     @JsonProperty("isFullScreen")
     var isFullScreen: Boolean = false
 
+    // Any self-managed Connection is placed into Connection.STATE_ACTIVE by
+    // markAccepted()/setActive() by default when the user accepts, and into
+    // Connection.STATE_RINGING by the Telecom framework itself while ringing (this cannot be
+    // avoided). Telecom applies its own default communication-route baseline while in either of
+    // those states, which can conflict with an app that manages its own call audio outside of
+    // Telecom. Both flags below default to false, preserving the existing behavior for apps that
+    // rely on Telecom's own audio routing.
+
+    // When true, accepting the call ends the self-managed Connection immediately instead of
+    // going through markAccepted()/setActive() -- for apps whose call audio is handled entirely
+    // outside of Telecom and don't need the connection to reach STATE_ACTIVE.
+    @JsonProperty("stopCallkitAfterAccepting")
+    var stopCallkitAfterAccepting: Boolean = false
+
+    // When true, corrects the audio route back to speaker whenever Telecom applies its own
+    // earpiece baseline while the connection is ringing and no Bluetooth/wired headset is connected.
+    @JsonProperty("routeRingtoneToSpeaker")
+    var routeRingtoneToSpeaker: Boolean = false
+
     @JsonProperty("from")
     var from: String = ""
 
@@ -160,6 +179,8 @@ data class Data(val args: Map<String, Any?>) {
         isImportant = android["isImportant"] as? Boolean ?: false
         isBot = android["isBot"] as? Boolean ?: false
         isFullScreen = android["isFullScreen"] as? Boolean ?: false
+        stopCallkitAfterAccepting = android["stopCallkitAfterAccepting"] as? Boolean ?: false
+        routeRingtoneToSpeaker = android["routeRingtoneToSpeaker"] as? Boolean ?: false
         from = android["from"] as? String ?: ""
         textAccept = android["textAccept"] as? String ?: ""
         textDecline = android["textDecline"] as? String ?: ""
@@ -332,6 +353,14 @@ data class Data(val args: Map<String, Any?>) {
             CallkitConstants.EXTRA_CALLKIT_IS_FULL_SCREEN,
             isFullScreen,
         )
+        bundle.putBoolean(
+            CallkitConstants.EXTRA_CALLKIT_STOP_CALLKIT_AFTER_ACCEPTING,
+            stopCallkitAfterAccepting,
+        )
+        bundle.putBoolean(
+            CallkitConstants.EXTRA_CALLKIT_ROUTE_RINGTONE_TO_SPEAKER,
+            routeRingtoneToSpeaker,
+        )
         bundle.putString(CallkitConstants.EXTRA_CALLKIT_ACTION_FROM, from)
         return bundle
     }
@@ -362,6 +391,14 @@ data class Data(val args: Map<String, Any?>) {
                 bundle.getBoolean(CallkitConstants.EXTRA_CALLKIT_IS_BOT, false)
             data.isFullScreen =
                 bundle.getBoolean(CallkitConstants.EXTRA_CALLKIT_IS_FULL_SCREEN, false)
+            data.stopCallkitAfterAccepting = bundle.getBoolean(
+                CallkitConstants.EXTRA_CALLKIT_STOP_CALLKIT_AFTER_ACCEPTING,
+                false
+            )
+            data.routeRingtoneToSpeaker = bundle.getBoolean(
+                CallkitConstants.EXTRA_CALLKIT_ROUTE_RINGTONE_TO_SPEAKER,
+                false
+            )
 
             data.missedNotificationId =
                 bundle.getInt(CallkitConstants.EXTRA_CALLKIT_MISSED_CALL_ID)
