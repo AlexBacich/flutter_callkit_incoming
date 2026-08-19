@@ -7,6 +7,7 @@ import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.telecom.CallAudioState
 import android.telecom.Connection
 import android.telecom.DisconnectCause
 import android.telecom.TelecomManager
@@ -146,6 +147,46 @@ class CallkitConnection(
         super.onSilence()
         Log.d(TAG, "onSilence id=$callId")
         FlutterCallkitIncomingPlugin.getInstance()?.getCallkitSoundPlayerManager()?.stop()
+    }
+
+    // Root cause (verified against AOSP android-16.0.0_r4 source and live device logs/dumpsys):
+    // any self-managed Connection is placed into STATE_RINGING by the Telecom
+    // framework itself (ConnectionService's own contract -- "New incoming calls will start with
+    // a Connection#STATE_RINGING state", confirmed unavoidable by removing our own setRinging()
+    // call and observing Telecom apply RINGING regardless). Entering RINGING makes
+    // CallAudioManager.onCallEnteringRinging() send RINGING_FOCUS to CallAudioRouteController,
+    // whose getBaseRoute() computes the device with NO memory of any previous request: it checks
+    // AudioManager#getPreferredDeviceForStrategy() first (always null for us -- that write API is
+    // @SystemApi + MODIFY_AUDIO_ROUTING, unavailable to a third-party app), then falls through to
+    // the native no-headset default, TYPE_BUILTIN_EARPIECE. Telecom then applies this via
+    // AudioManager#setCommunicationDevice() from its OWN uid -- and AudioDeviceBroker's
+    // arbitration (topCommunicationRouteClient()) always favors whichever registered client's uid
+    // matches the current "audio mode owner", which is Telecom for the lifetime of the call. So
+    // no usage/strategy/attribute choice on our OWN audio track can influence this: the earpiece
+    // assignment is computed and applied entirely inside Telecom, before our track is even
+    // considered, and is re-applied every time AudioDeviceBroker re-arbitrates -- observed twice
+    // ~900ms apart in one real device trace, not a fixed count.
+    //
+    // Connection#setAudioRoute() is the only public, unprivileged lever a self-managed Connection
+    // has to correct this: it re-drives Telecom's own CallAudioRouteController to reissue its
+    // route with speaker instead. A one-shot version (fire once, remember with a flag) fixed the
+    // first occurrence but missed the second, later re-arbitration, which then stuck silently for
+    // the rest of the ringing window -- confirmed on-device. There is no fixed bound on how many
+    // times AudioDeviceBroker re-arbitrates, so this reacts to EVERY report of earpiece while
+    // still RINGING, with no counter or timer -- exactly the same unconditional, event-driven
+    // pattern Telecom's own CallAudioRouteController.handleSpeakerOff() uses to correct ITS OWN
+    // route back to earpiece whenever something else changes it away. This is not a watchdog: it
+    // never runs on its own, only in direct response to a genuine onCallAudioStateChanged
+    // notification from Telecom. Scoped to STATE_RINGING and to the earpiece case specifically --
+    // a connected Bluetooth or wired headset is a legitimate, higher-priority baseline that must
+    // never be overridden.
+    override fun onCallAudioStateChanged(callAudioState: CallAudioState) {
+        super.onCallAudioStateChanged(callAudioState)
+        Log.d(TAG, "onCallAudioStateChanged id=$callId route=${callAudioState.route}")
+        if (state == STATE_RINGING && callAudioState.route == CallAudioState.ROUTE_EARPIECE) {
+            Log.d(TAG, "onCallAudioStateChanged id=$callId correcting RINGING baseline to speaker")
+            setAudioRoute(CallAudioState.ROUTE_SPEAKER)
+        }
     }
 
     override fun onUnhold() {
