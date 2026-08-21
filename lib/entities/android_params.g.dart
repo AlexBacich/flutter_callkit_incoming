@@ -29,6 +29,8 @@ AndroidParams _$AndroidParamsFromJson(Map<String, dynamic> json) =>
       from: json['from'] as String?,
       textAccept: json['textAccept'] as String?,
       textDecline: json['textDecline'] as String?,
+      stopCallkitAfterAccepting: json['stopCallkitAfterAccepting'] as bool?,
+      routeRingtoneToSpeaker: json['routeRingtoneToSpeaker'] as bool?,
     );
 
 Map<String, dynamic> _$AndroidParamsToJson(AndroidParams instance) =>
@@ -54,4 +56,6 @@ Map<String, dynamic> _$AndroidParamsToJson(AndroidParams instance) =>
       'from': instance.from,
       'textAccept': instance.textAccept,
       'textDecline': instance.textDecline,
+      'stopCallkitAfterAccepting': instance.stopCallkitAfterAccepting,
+      'routeRingtoneToSpeaker': instance.routeRingtoneToSpeaker,
     };

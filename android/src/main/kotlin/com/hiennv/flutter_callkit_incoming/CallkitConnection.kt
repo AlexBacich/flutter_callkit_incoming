@@ -71,12 +71,11 @@ class CallkitConnection(
         fun activeCount(): Int = activeConnections.size
     }
 
+    private val routeRingtoneToSpeaker: Boolean = Data.fromBundle(bundle).routeRingtoneToSpeaker
+
     init {
         connectionProperties = PROPERTY_SELF_MANAGED
         audioModeIsVoip = true
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-            setAudioRoute(CallAudioState.ROUTE_SPEAKER)
-        }
         // CAPABILITY_HOLD ("can be held right now") and CAPABILITY_SUPPORT_HOLD
         // ("hold feature exists") are distinct flags and Telecom requires BOTH:
         // when the user answers another call, CallsManager only holds the active
@@ -120,15 +119,6 @@ class CallkitConnection(
         finishWithCause(DisconnectCause.UNKNOWN)
     }
 
-    override fun onCallAudioStateChanged(state: CallAudioState?) {
-        super.onCallAudioStateChanged(state)
-        Log.d(TAG, "onCallAudioStateChanged id=$callId state=$state")
-        if (state?.route != CallAudioState.ROUTE_SPEAKER) {
-            Log.d(TAG, "onCallAudioStateChanged: forcing ROUTE_SPEAKER")
-            setAudioRoute(CallAudioState.ROUTE_SPEAKER)
-        }
-    }
-
     // Telecom holds this self-managed connection when another call takes over
     // the audio (e.g. the user dials or answers a cellular call). Forward the
     // transition to Dart so the app can pause its media — mirrors what iOS
@@ -159,6 +149,38 @@ class CallkitConnection(
         super.onSilence()
         Log.d(TAG, "onSilence id=$callId")
         FlutterCallkitIncomingPlugin.getInstance()?.getCallkitSoundPlayerManager()?.stop()
+    }
+
+    // A self-managed Connection is always placed into STATE_RINGING by the Telecom framework
+    // itself, which then computes and applies its own default audio route for that state:
+    // AudioManager#getPreferredDeviceForStrategy() (privileged, unavailable to a third-party app)
+    // first, then a native no-headset fallback of the built-in earpiece. Telecom applies this
+    // from its own process, and AudioDeviceBroker's client arbitration always favors whichever
+    // registered client's uid matches the current audio mode owner -- Telecom itself for the
+    // lifetime of the call -- so no usage/attribute choice on the app's own audio track can
+    // influence this, and Telecom may reassert the earpiece baseline more than once while ringing.
+    //
+    // Connection#setAudioRoute() is the only public, unprivileged API a self-managed Connection
+    // has to correct its own route, and it is Telecom's own documented mechanism for doing so:
+    // CallAudioRouteController corrects its own route the same way, unconditionally, whenever
+    // something changes it away from what it expects. Reissuing it every time this callback
+    // reports the earpiece while still ringing -- rather than once -- matches that same
+    // unconditional, event-driven pattern instead of assuming a fixed number of corrections.
+    // Scoped to STATE_RINGING and to the earpiece case specifically -- a connected Bluetooth or
+    // wired headset is a legitimate, higher-priority baseline that must never be overridden.
+    //
+    // Opt-in via the routeRingtoneToSpeaker param (default false) -- apps that rely on Telecom's
+    // own default audio routing see no behavior change.
+    override fun onCallAudioStateChanged(callAudioState: CallAudioState) {
+        super.onCallAudioStateChanged(callAudioState)
+        Log.d(TAG, "onCallAudioStateChanged id=$callId route=${callAudioState.route}")
+        if (routeRingtoneToSpeaker &&
+            state == STATE_RINGING &&
+            callAudioState.route == CallAudioState.ROUTE_EARPIECE
+        ) {
+            Log.d(TAG, "onCallAudioStateChanged id=$callId correcting RINGING baseline to speaker")
+            setAudioRoute(CallAudioState.ROUTE_SPEAKER)
+        }
     }
 
     override fun onUnhold() {

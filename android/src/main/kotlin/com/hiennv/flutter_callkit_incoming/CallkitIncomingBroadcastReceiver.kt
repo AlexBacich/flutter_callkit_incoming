@@ -263,16 +263,23 @@ class CallkitIncomingBroadcastReceiver : BroadcastReceiver() {
 
             "${context.packageName}.${CallkitConstants.ACTION_CALL_ACCEPT}" -> {
                 try {
-                    driveTelecomConnection(context, data, CallkitConstants.ACTION_CALL_ACCEPT)
-                    // Release the self-managed connection right after activating it. Apps whose
-                    // call audio runs over their own engine (not Telecom) don't need it active
-                    // for the call's duration - but leaving it active pins the voice-call audio
-                    // route to the earpiece, which can stay stuck after the app's own audio
-                    // session takes back control. Calling this from here, after
-                    // driveTelecomConnection() has returned, avoids a race where ending it from
-                    // inside the same Connection call as setActive() leaves the audio route
-                    // stuck instead of releasing it.
-                    CallkitConnection.find(Data.fromBundle(data).id)?.markEnded()
+                    val incomingData = Data.fromBundle(data)
+                    if (incomingData.stopCallkitAfterAccepting) {
+                        // Do not drive the connection through markAccepted()/setActive() here.
+                        // Apps whose call audio runs over their own engine (not Telecom) don't
+                        // need the self-managed connection to go OFFHOOK at all: entering
+                        // STATE_ACTIVE is what triggers Telecom's NEW_ACTIVE_OR_DIALING_CALL
+                        // transition, which hands the voice-call route to
+                        // CallAudioRouteStateMachine and seizes it to the earpiece baseline (no
+                        // headset) -- and setAudioRoute() cannot reliably undo that afterwards,
+                        // since it is only an advisory request Telecom may or may not honor.
+                        // Going straight from RINGING to DISCONNECTED skips the active state --
+                        // and the seizure -- entirely, via the same clean teardown markEnded()/
+                        // onReject() already use from RINGING.
+                        CallkitConnection.find(incomingData.id)?.markEnded()
+                    } else {
+                        driveTelecomConnection(context, data, CallkitConstants.ACTION_CALL_ACCEPT)
+                    }
                     FlutterCallkitIncomingPlugin.notifyEventCallbacks(CallkitEventCallback.CallEvent.ACCEPT, data)
                     // start service and show ongoing call when call is accepted
                     CallkitNotificationService.startServiceWithAction(
@@ -281,7 +288,7 @@ class CallkitIncomingBroadcastReceiver : BroadcastReceiver() {
                         data
                     )
                     sendEventFlutter(CallkitConstants.ACTION_CALL_ACCEPT, data)
-                    addCall(context, Data.fromBundle(data), true)
+                    addCall(context, incomingData, true)
                     FlutterCallkitIncomingPlugin.acceptCallHandleCallback(data)
                 } catch (error: Exception) {
                     Log.e(TAG, null, error)

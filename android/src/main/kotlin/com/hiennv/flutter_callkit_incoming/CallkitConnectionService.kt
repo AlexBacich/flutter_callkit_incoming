@@ -3,7 +3,6 @@ package com.hiennv.flutter_callkit_incoming
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
-import android.telecom.CallAudioState
 import android.telecom.Connection
 import android.telecom.ConnectionRequest
 import android.telecom.ConnectionService
@@ -69,9 +68,6 @@ class CallkitConnectionService : ConnectionService() {
                 TelecomManager.PRESENTATION_ALLOWED,
             )
             setRinging()
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                setAudioRoute(CallAudioState.ROUTE_SPEAKER)
-            }
         }
         return connection
     }
